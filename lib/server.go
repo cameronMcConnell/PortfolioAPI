@@ -1,20 +1,22 @@
 package lib
 
 import (
-	"encoding/json"
+	"bytes"
+	"io"
 	"net/http"
 )
 
 type Server struct {
 	Address string
+	Client *http.Client
 }
 
 func NewServer(address string) *Server {
-	return &Server{Address: address}
+	return &Server{Address: address, Client: http.DefaultClient}
 }
 
 func (s *Server) StartServer() error {
-	bindRoutes()
+	s.bindRoutes()
 
 	err := http.ListenAndServeTLS(s.Address, "https/cert.pem", "https/key.pem", nil)
 	if err != nil {
@@ -24,29 +26,57 @@ func (s *Server) StartServer() error {
 	return nil
 }
 
-func bindRoutes() {
-	http.Handle("/", http.FileServer(http.Dir("./Portfolio/site")))
-
-	http.HandleFunc("/github", func(w http.ResponseWriter, r *http.Request) {
-		handleGithub(w, r)
+func (s *Server) bindRoutes() {
+	http.HandleFunc("/projects", func(w http.ResponseWriter, r *http.Request) {
+		s.getProjects(w, r)
 	})
 }
 
-func handleGithub(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
+func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	apiKey := ReadEnv("GITHUB_API_ACCESS_KEY")
+	query := `
+	{
+	  user(login: "cameronMcConnell") {
+		pinnedRepositories(first: 6) {
+		  nodes {
+			name
+			url
+			description
+		  }
+		}
+	  }
+	}`
 
-	apiKeyJson := GithubAPIKeyJSON{ApiKey: apiKey}
+	queryBytes := []byte(query)
+	body := bytes.NewReader(queryBytes)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	
-	err := json.NewEncoder(w).Encode(apiKeyJson)
+	forwardReq, err := http.NewRequest(http.MethodPost, "https://api.github.com/graphql", body)
 	if err != nil {
-		http.Error(w, "Error writing response body", http.StatusInternalServerError)
+		http.Error(w, "Failed to create github request", http.StatusInternalServerError)
+		return
+	}
+
+	forwardReq.Header.Set("Authorization", "Bearer " + ReadEnv("GITHUB_API_ACCESS_KEY"))
+	forwardReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.Client.Do(forwardReq)
+	if err != nil {
+		http.Error(w, "Failed to request data from github.com", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		http.Error(w, "Error writing response", http.StatusInternalServerError)
 	}
 }
