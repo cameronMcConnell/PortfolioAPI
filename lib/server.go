@@ -28,7 +28,7 @@ func (s *Server) StartServer() error {
 
 func (s *Server) bindRoutes() {
 	http.HandleFunc("/projects", func(w http.ResponseWriter, r *http.Request) {
-		s.getProjects(w, r)
+		go s.getProjects(w, r)
 	})
 }
 
