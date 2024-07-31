@@ -18,7 +18,7 @@ func NewServer(address string) *Server {
 func (s *Server) StartServer() error {
 	s.bindRoutes()
 
-	err := http.ListenAndServeTLS(s.Address, "https/cert.pem", "https/key.pem", nil)
+	err := http.ListenAndServe(s.Address, nil)
 	if err != nil {
 		return err
 	}
