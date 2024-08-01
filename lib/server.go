@@ -27,6 +27,8 @@ func (s *Server) StartServer() error {
 }
 
 func (s *Server) bindRoutes() {
+	http.Handle("/", http.FileServer(http.Dir("./site")))
+
 	http.HandleFunc("/projects", func(w http.ResponseWriter, r *http.Request) {
 		go s.getProjects(w, r)
 	})
