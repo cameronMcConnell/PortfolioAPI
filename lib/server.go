@@ -40,18 +40,20 @@ func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
-	{
-	  user(login: "cameronMcConnell") {
-		pinnedRepositories(first: 6) {
-		  nodes {
-			name
-			url
-			description
+	query := 
+	`{
+		user(login: "cameronMcConnell") {
+		  pinnedItems(first: 6, types: REPOSITORY) {
+			nodes {
+			  ... on RepositoryInfo {
+				name
+				description
+				url
+			  }
+			}
 		  }
 		}
-	  }
-	}`
+	  }`
 
 	queryBytes := []byte(query)
 	body := bytes.NewReader(queryBytes)
