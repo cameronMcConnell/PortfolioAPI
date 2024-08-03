@@ -53,7 +53,7 @@ func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
 			}
 		  }
 		}
-	  }`
+	}`
 
 	queryBytes := []byte(query)
 	body := bytes.NewReader(queryBytes)
