@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 )
@@ -30,7 +31,7 @@ func (s *Server) bindRoutes() {
 	http.Handle("/", http.FileServer(http.Dir("./site")))
 
 	http.HandleFunc("/projects", func(w http.ResponseWriter, r *http.Request) {
-		go s.getProjects(w, r)
+		s.getProjects(w, r)
 	})
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -52,20 +53,29 @@ func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
 	query := 
 	`{
 		user(login: "cameronMcConnell") {
-		  pinnedItems(first: 6, types: REPOSITORY) {
-			nodes {
-			  ... on RepositoryInfo {
-				name
-				description
-				url
-			  }
+			pinnedItems(first: 6, types: REPOSITORY) {
+				nodes {
+					... on RepositoryInfo {
+						name
+						description
+						url
+					}
+				}
 			}
-		  }
 		}
 	}`
 
-	queryBytes := []byte(query)
-	body := bytes.NewReader(queryBytes)
+	requestBody := map[string]string{
+		"query": query,
+	}
+
+	jsonBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		http.Error(w, "Error parsing json", http.StatusInternalServerError)
+		return
+	}
+
+	body := bytes.NewReader(jsonBytes)
 
 	forwardReq, err := http.NewRequest(http.MethodPost, "https://api.github.com/graphql", body)
 	if err != nil {
@@ -83,13 +93,16 @@ func (s *Server) getProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	for k, v := range resp.Header {
-		w.Header()[k] = v
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
+		return
 	}
-	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(responseBody)
 	if err != nil {
 		http.Error(w, "Error writing response", http.StatusInternalServerError)
+		return
 	}
 }
